@@ -1,9 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::process;
-use std::{fs, path::Path, process::Command};
+
+use std::{fmt::format, fs::{self, File}, io::{self, Read}, path::Path, process, process::Command};
 use eframe::egui;
 use serde::{Serialize, Deserialize};
 use reqwest;
+use md5;
+
+
+const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win/";
+const UPDATE_FILE_NAME: &str  = "update.json";
+const COMPRESSION_EXTENSION: &str = ".zip";
+
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,7 +32,7 @@ fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([320.0, 240.0])
+            .with_inner_size([512.0, 512.0])
             .with_resizable(false)
             .with_maximize_button(false),
         ..Default::default()
@@ -53,7 +60,7 @@ struct SplashScreen {
 impl Default for SplashScreen {
     fn default() -> Self {
         Self {
-            message: "Guncellemeler denetleniyor".to_owned(),
+            message: "Guncellemeler denetleniyor...".to_owned(),
             percentage: 0,
             update_check_started: false,
             local_launcher_build: 1,
@@ -71,6 +78,7 @@ impl eframe::App for SplashScreen {
             ui.image(egui::include_image!(
                 "../resources/valor_splash.png"
             ));
+            ui.add_space(2.0);
             ui.label(format!("{}", self.message));
         });
     }
@@ -80,7 +88,7 @@ impl eframe::App for SplashScreen {
 impl SplashScreen {
     fn start_update_check(&mut self) {
         self.update_check_started = true;
-        let response: reqwest::blocking::Response = reqwest::blocking::get("http://valor.gen.tr/cuo_files_win/update.json").unwrap();
+        let response: reqwest::blocking::Response = reqwest::blocking::get(CUO_FILES_URL.to_owned() + UPDATE_FILE_NAME).unwrap();
         let update_response: UpdateResponse = response.json().unwrap();
         println!("{:?}", update_response);
         self.filter_update_response(update_response);
@@ -92,7 +100,14 @@ impl SplashScreen {
         for update_file in update_response.files.iter() {
             let path: &Path = Path::new(&update_file.local_path);
             if path.exists() {
-                continue
+                let mut f = File::open(path).unwrap();
+                let mut contents = Vec::<u8>::new();
+                f.read_to_end(&mut contents).unwrap();
+                let digest = md5::compute(&contents.as_slice());
+                let local_hash = format!("{:x}", digest).to_uppercase();
+                if local_hash == update_file.hash {
+                    continue;
+                }
             }
             files_to_download.push(update_file.local_path.to_owned());
             // path.file_name().unwrap().to_str().unwrap().to_owned()
