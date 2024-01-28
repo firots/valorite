@@ -1,21 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::{fmt::format, fs, io::{self, Read, Write}, path::Path, process, process::Command};
+use std::{fs, io::{self, Read}, path::Path, process, process::Command};
 use std::fs::File;
 use eframe::egui;
 use serde::{Serialize, Deserialize};
 use reqwest;
-use reqwest::Error as ReqwestError;
-use reqwest::blocking::Response;
 use md5;
 use guard::guard;
 use zip::read::ZipArchive;
 use downloader::Downloader;
 
-
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
-
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
@@ -140,7 +136,7 @@ impl SplashScreen {
         self.download_files(files_to_download)
     }
 
-    fn download_files(&self, files_to_download: Vec<String>) {
+    fn download_files(&mut self, files_to_download: Vec<String>) {
         for file_path in files_to_download.iter() {
             self.download_file(file_path.to_string())
         }
@@ -167,7 +163,8 @@ impl SplashScreen {
         process::exit(0x0100);
     }
 
-    fn download_file(&self, file_path: String) {
+    fn download_file(&mut self, file_path: String) {
+        self.message = "Indiriliyor: ".to_owned() + &file_path;
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
         let mut download_path = path.parent().and_then(|parent| parent.to_str());
@@ -183,7 +180,7 @@ impl SplashScreen {
 
         let zip_path_string = ".".to_owned() + &file_path + COMPRESSION_EXTENSION;
         let zip_path  = std::path::Path::new(&zip_path_string);
-        fs::remove_file(zip_path);
+        let _ = fs::remove_file(zip_path);
         
         let mut downloader = Downloader::builder()
             .download_folder(std::path::Path::new(&(".".to_owned() + download_path.unwrap())))
@@ -200,7 +197,7 @@ impl SplashScreen {
                 Ok(s) => {
                     let extract_path_string = ".".to_owned() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
-                    self.unzip_file(zip_path, extract_path);
+                    let _ = self.unzip_file(zip_path, extract_path);
                     println!("Success: {}", s)
                 },
             };
@@ -234,14 +231,3 @@ impl SplashScreen {
         Ok(())
     }
 }
-
-
-/*
-
-            if let Err(err) = unzip_file(&zip_file_path, &extract_path) {
-                eprintln!("Error while unzipping: {}", err);
-            } else {
-                println!("Download and unzip successful!");
-            }
-
-*/
