@@ -1,11 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-
 use std::{fmt::format, fs::{self, File}, io::{self, Read}, path::Path, process, process::Command};
 use eframe::egui;
 use serde::{Serialize, Deserialize};
+// use serde_json::{Result, Value};
 use reqwest;
 use md5;
-
+use guard::guard;
+// use core::result::Result as CoreResult;
 
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win/";
 const UPDATE_FILE_NAME: &str  = "update.json";
@@ -52,7 +53,7 @@ fn main() -> Result<(), eframe::Error> {
 struct SplashScreen {
     message: String,
     percentage: u32,
-    update_check_started: bool,
+    view_did_load: bool,
     remote_launcher_build: u32,
     local_launcher_build: u32
 }
@@ -62,7 +63,7 @@ impl Default for SplashScreen {
         Self {
             message: "Guncellemeler denetleniyor...".to_owned(),
             percentage: 0,
-            update_check_started: false,
+            view_did_load: false,
             local_launcher_build: 1,
             remote_launcher_build: 0
         }
@@ -72,8 +73,9 @@ impl Default for SplashScreen {
 impl eframe::App for SplashScreen {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if !self.update_check_started {
-                self.start_update_check();
+            if !self.view_did_load {
+                self.view_did_load();
+                self.view_did_load = true
             }
             ui.image(egui::include_image!(
                 "../resources/valor_splash.png"
@@ -86,15 +88,33 @@ impl eframe::App for SplashScreen {
 
 // Business
 impl SplashScreen {
-    fn start_update_check(&mut self) {
-        self.update_check_started = true;
-        let response: reqwest::blocking::Response = reqwest::blocking::get(CUO_FILES_URL.to_owned() + UPDATE_FILE_NAME).unwrap();
-        let update_response: UpdateResponse = response.json().unwrap();
-        println!("{:?}", update_response);
-        self.filter_update_response(update_response);
+    fn view_did_load(&mut self) {
+        self.start_update_check()
     }
 
-    fn filter_update_response(&self, update_response: UpdateResponse) {
+    fn start_update_check(&mut self) {
+        guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + UPDATE_FILE_NAME) else { 
+            println!("Cannot fetch the update.json");
+            self.start_game();
+            return 
+        });
+
+        guard!(let Ok(body) = response.text() else { 
+            println!("Cannot get body for update.json.");
+            self.start_game();
+            return 
+        });
+
+        guard!(let Ok(update_response) = serde_json::from_str(&body) else { 
+            println!("Cannot get body for update.json.");
+            self.start_game();
+            return 
+        });
+        self.process_update_response(update_response);
+    }
+
+    fn process_update_response(&mut self, update_response: UpdateResponse) {
+        self.remote_launcher_build = update_response.launcher_build;
         let mut files_to_download: Vec<String> = Vec::new();
 
         for update_file in update_response.files.iter() {
