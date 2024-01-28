@@ -1,14 +1,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::{fmt::format, fs::{self, File}, io::{self, Read}, path::Path, process, process::Command};
+use std::{fmt::format, fs, io::{self, Read, Write}, path::Path, process, process::Command};
+use std::fs::File;
 use eframe::egui;
 use serde::{Serialize, Deserialize};
-// use serde_json::{Result, Value};
 use reqwest;
+use reqwest::Error as ReqwestError;
+use reqwest::blocking::Response;
 use md5;
 use guard::guard;
-// use core::result::Result as CoreResult;
+use zip::read::ZipArchive;
+use downloader::Downloader;
 
-const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win/";
+
+const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
 
@@ -93,7 +97,7 @@ impl SplashScreen {
     }
 
     fn start_update_check(&mut self) {
-        guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + UPDATE_FILE_NAME) else { 
+        guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME) else { 
             println!("Cannot fetch the update.json");
             self.start_game();
             return 
@@ -137,6 +141,9 @@ impl SplashScreen {
     }
 
     fn download_files(&self, files_to_download: Vec<String>) {
+        for file_path in files_to_download.iter() {
+            self.download_file(file_path.to_string())
+        }
         self.update_launcher_if_needed()
     }
 
@@ -153,10 +160,88 @@ impl SplashScreen {
     }
 
     fn start_game(&self) {
-        /*Command::new("valor_cuo/ClassicUO.exe")
+        Command::new("valor_cuo/ClassicUO.exe")
         .current_dir("valor_cuo/")
         .spawn()
         .unwrap();
-        process::exit(0x0100);*/
+        process::exit(0x0100);
+    }
+
+    fn download_file(&self, file_path: String) {
+        let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
+        let path = Path::new(&file_path);
+        let mut download_path = path.parent().and_then(|parent| parent.to_str());
+        if download_path == None {
+            download_path = Some("/");
+        } else {
+            fs::create_dir_all(".".to_owned() + download_path.unwrap())
+                .expect("Failed to create");
+        }
+
+        println!("file_url: {}", file_url);
+        println!("download_path: {}", download_path.unwrap());
+
+        let zip_path_string = ".".to_owned() + &file_path + COMPRESSION_EXTENSION;
+        let zip_path  = std::path::Path::new(&zip_path_string);
+        fs::remove_file(zip_path);
+        
+        let mut downloader = Downloader::builder()
+            .download_folder(std::path::Path::new(&(".".to_owned() + download_path.unwrap())))
+            .parallel_requests(1)
+            .build()
+            .unwrap();
+    
+        let dl = downloader::Download::new(&file_url);
+        let result = downloader.download(&[dl]).unwrap();
+    
+        for r in result {
+            match r {
+                Err(e) => println!("Error: {}", e.to_string()),
+                Ok(s) => {
+                    let extract_path_string = ".".to_owned() + download_path.unwrap();
+                    let extract_path = std::path::Path::new(&extract_path_string);
+                    self.unzip_file(zip_path, extract_path);
+                    println!("Success: {}", s)
+                },
+            };
+        }
+    }
+    
+    fn unzip_file(&self, zip_path: &Path, extract_path: &Path) -> Result<(), io::Error> {
+        let file = File::open(zip_path)?;
+        let reader = io::BufReader::new(file);
+        let mut archive = ZipArchive::new(reader)?;
+    
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let outpath = extract_path.join(file.sanitized_name());
+    
+            if (&*file.name()).ends_with('/') {
+                std::fs::create_dir_all(&outpath)?;
+            } else {
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        std::fs::create_dir_all(&p)?;
+                    }
+                }
+                let mut outfile = File::create(&outpath)?;
+                io::copy(&mut file, &mut outfile)?;
+            }
+        }
+
+        fs::remove_file(zip_path)?;
+    
+        Ok(())
     }
 }
+
+
+/*
+
+            if let Err(err) = unzip_file(&zip_file_path, &extract_path) {
+                eprintln!("Error while unzipping: {}", err);
+            } else {
+                println!("Download and unzip successful!");
+            }
+
+*/
