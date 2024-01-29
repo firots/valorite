@@ -12,12 +12,13 @@ use downloader::Downloader;
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
+const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct UpdateResponse {
-    launcher_build: u32,
+    launcher: UpdateFile,
     files: Vec<UpdateFile>
 }
 
@@ -92,9 +93,8 @@ impl SplashScreen {
         let sender = self.sender.clone();
         let _ = thread::spawn(move || {
             let mut updater = Updater {
-                local_launcher_build: 1,
-                remote_launcher_build: 0,
-                message_sender: sender
+                message_sender: sender,
+                launcher_update_file: None
             };
             updater.start_update_check();
         });
@@ -112,8 +112,7 @@ impl SplashScreen {
 }
 
 struct Updater {
-    remote_launcher_build: u32,
-    local_launcher_build: u32,
+    launcher_update_file: Option<UpdateFile>,
     message_sender: Sender<String>
 }
 
@@ -141,19 +140,13 @@ impl Updater {
     }
 
     fn process_update_response(&mut self, update_response: UpdateResponse) {
-        self.remote_launcher_build = update_response.launcher_build;
         let mut files_to_download: Vec<String> = Vec::new();
+        self.launcher_update_file = Some(update_response.launcher);
 
         for update_file in update_response.files.iter() {
-            let path_string = &(".".to_owned() + &update_file.local_path);
-            let path: &Path = Path::new(path_string);
-            if path.exists() {
-                let mut f = File::open(path).unwrap();
-                let mut contents = Vec::<u8>::new();
-                f.read_to_end(&mut contents).unwrap();
-                let digest = md5::compute(&contents.as_slice());
-                let local_hash = format!("{:x}", digest).to_uppercase();
-                if local_hash == update_file.hash {
+            let local_hash = self.get_md5(&update_file.local_path);
+            if let Some(local_hash_unwrapped) = local_hash {
+                if local_hash_unwrapped == update_file.hash.to_lowercase() {
                     continue;
                 }
             }
@@ -164,35 +157,72 @@ impl Updater {
         self.download_files(files_to_download)
     }
 
+    fn get_md5(&self, local_path: &str) -> Option<String> {
+        let path_string = &(".".to_owned() + &local_path);
+        let path: &Path = Path::new(path_string);
+
+        if path.exists() {
+            let mut f = File::open(path).unwrap();
+            let mut contents = Vec::<u8>::new();
+            f.read_to_end(&mut contents).unwrap();
+            let digest = md5::compute(&contents.as_slice());
+            let hash = format!("{:x}", digest);
+            return Some(hash)
+        }
+        return None
+    }
+
     fn download_files(&mut self, files_to_download: Vec<String>) {
         for file_path in files_to_download.iter() {
-            self.download_file(file_path.to_string())
+            self.download_file(file_path)
         }
         self.update_launcher_if_needed()
     }
 
     fn update_launcher_if_needed(&mut self) {
-        if self.local_launcher_build >= self.remote_launcher_build {
-            self.start_game()
-        } else {
-            self.update_launcher()
+        if let Some(launcher_update_file) = &self.launcher_update_file {
+            println!("launcher_update_file_hash: {}", launcher_update_file.hash);
+            if let Some(local_launcher_hash) = self.get_md5(LAUNCHER_EXECUTABLE_PATH) {
+                println!("local_launcher_hash: {}", local_launcher_hash);
+                if launcher_update_file.hash != local_launcher_hash {
+                    self.update_launcher();
+                    return
+                }
+            }
         }
+        self.start_game();
     }
 
     fn update_launcher(&mut self) {
-
+        if let Some(update_file) = &self.launcher_update_file {
+            println!("update 1");
+            self.download_file(&update_file.local_path);
+            if let Some(new_hash) = self.get_md5(&update_file.local_path) {
+                println!("update 2");
+                println!("new_hash: {}", new_hash);
+                println!("update_file_hash: {}", update_file.hash);
+                if new_hash == update_file.hash.to_lowercase() {
+                    println!("update 3");
+                    println!("call self replace");
+                    let _ = self_replace::self_replace(&update_file.local_path);
+                    let _ = std::fs::remove_file(&update_file.local_path);
+                }
+            }
+        }
+        self.start_game()
     }
 
     fn start_game(&mut self) {
+        println!("Starting the game...");
         self.message_sender.send("Oyun baslatiliyor...".to_owned()).unwrap();
         Command::new("valor_cuo/ClassicUO.exe")
         .current_dir("valor_cuo/")
         .spawn()
         .unwrap();
-        process::exit(0x0100);
+        // process::exit(0x0100);
     }
 
-    fn download_file(&mut self, file_path: String) {
+    fn download_file(&self, file_path: &str) {
         self.message_sender.send("Indiriliyor: ".to_owned() + &file_path).unwrap();
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
@@ -257,7 +287,6 @@ impl Updater {
         }
 
         fs::remove_file(zip_path)?;
-    
         Ok(())
     }
 }
