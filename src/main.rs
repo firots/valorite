@@ -214,7 +214,7 @@ impl Updater {
     fn start_game(&mut self) {
         println!("Starting the game...");
         self.message_sender.send("Oyun baslatiliyor...".to_owned()).unwrap();
-        Command::new("valor_cuo/ClassicUO.exe")
+        Command::new("valor_cuo/cuo.exe")
         .current_dir("valor_cuo/")
         .spawn()
         .unwrap();
