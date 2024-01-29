@@ -183,7 +183,7 @@ impl Updater {
             println!("launcher_update_file_hash: {}", launcher_update_file.hash);
             if let Some(local_launcher_hash) = self.get_md5(LAUNCHER_EXECUTABLE_PATH) {
                 println!("local_launcher_hash: {}", local_launcher_hash);
-                if launcher_update_file.hash != local_launcher_hash {
+                if launcher_update_file.hash.to_lowercase() != local_launcher_hash {
                     self.update_launcher();
                     return
                 }
