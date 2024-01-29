@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::{fs, io::{self, Read}, path::Path, process, process::Command};
+use std::{fs, io::{self, Read}, path::Path, process, process::Command, sync::{Arc, Mutex}, thread, time::Duration};
 use std::fs::File;
 use eframe::egui;
 use serde::{Serialize, Deserialize};
@@ -8,6 +8,7 @@ use md5;
 use guard::guard;
 use zip::read::ZipArchive;
 use downloader::Downloader;
+use std::sync::mpsc;
 
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
@@ -89,9 +90,29 @@ impl eframe::App for SplashScreen {
 // Business
 impl SplashScreen {
     fn view_did_load(&mut self) {
-        self.start_update_check()
+        let _ = thread::spawn(move || {
+            let mut updater = Updater::default();
+            updater.start_update_check();
+        });
     }
+}
 
+struct Updater {
+    remote_launcher_build: u32,
+    local_launcher_build: u32,
+}
+
+impl Default for Updater {
+    fn default() -> Self {
+        Self {
+            local_launcher_build: 1,
+            remote_launcher_build: 0,
+        }
+    }
+}
+
+// Business
+impl Updater {
     fn start_update_check(&mut self) {
         guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME) else { 
             println!("Cannot fetch the update.json");
@@ -118,7 +139,8 @@ impl SplashScreen {
         let mut files_to_download: Vec<String> = Vec::new();
 
         for update_file in update_response.files.iter() {
-            let path: &Path = Path::new(&update_file.local_path);
+            let path_string = &(".".to_owned() + &update_file.local_path);
+            let path: &Path = Path::new(path_string);
             if path.exists() {
                 let mut f = File::open(path).unwrap();
                 let mut contents = Vec::<u8>::new();
@@ -143,7 +165,7 @@ impl SplashScreen {
         self.update_launcher_if_needed()
     }
 
-    fn update_launcher_if_needed(&self) {
+    fn update_launcher_if_needed(&mut self) {
         if self.local_launcher_build >= self.remote_launcher_build {
             self.start_game()
         } else {
@@ -151,11 +173,13 @@ impl SplashScreen {
         }
     }
 
-    fn update_launcher(&self) {
+    fn update_launcher(&mut self) {
 
     }
 
-    fn start_game(&self) {
+    fn start_game(&mut self) {
+        // self.message = "Oyun baslatiliyor...".to_owned(); 
+        thread::sleep(Duration::from_millis(4000));
         Command::new("valor_cuo/ClassicUO.exe")
         .current_dir("valor_cuo/")
         .spawn()
@@ -164,7 +188,7 @@ impl SplashScreen {
     }
 
     fn download_file(&mut self, file_path: String) {
-        self.message = "Indiriliyor: ".to_owned() + &file_path;
+        // self.message = "Indiriliyor: ".to_owned() + &file_path;
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
         let mut download_path = path.parent().and_then(|parent| parent.to_str());
