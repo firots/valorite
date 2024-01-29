@@ -202,9 +202,9 @@ impl Updater {
                 println!("new_hash: {}", new_hash);
                 println!("update_file_hash: {}", update_file.hash);
                 if new_hash == update_file.hash.to_lowercase() {
-                    println!("update 3");
-                    println!("call self replace");
-                    let _ = self_replace::self_replace(&update_file.local_path);
+                    println!("call self replace: {}", update_file.hash);
+                    let new_launcher_path = ".".to_owned() + &update_file.local_path;
+                    let _ = self_replace::self_replace(new_launcher_path);
                     let _ = std::fs::remove_file(&update_file.local_path);
                 }
             }
@@ -219,7 +219,7 @@ impl Updater {
         .current_dir("valor_cuo/")
         .spawn()
         .unwrap();
-        // process::exit(0x0100);
+        process::exit(0x0100);
     }
 
     fn download_file(&self, file_path: &str) {
