@@ -13,6 +13,7 @@ const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
 const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
+const BUILD_NUMBER: i32 = 1;
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,7 +88,6 @@ impl eframe::App for SplashScreen {
     }
 }
 
-// Business
 impl SplashScreen {
     fn view_did_load(&mut self) {
         let sender = self.sender.clone();
@@ -111,12 +111,12 @@ impl SplashScreen {
     }
 }
 
+// Business
 struct Updater {
     launcher_update_file: Option<UpdateFile>,
     message_sender: Sender<String>
 }
 
-// Business
 impl Updater {
     fn start_update_check(&mut self) {
         guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME) else { 
@@ -151,7 +151,6 @@ impl Updater {
                 }
             }
             files_to_download.push(update_file.local_path.to_owned());
-            // path.file_name().unwrap().to_str().unwrap().to_owned()
         }								
         println!("{:?}", files_to_download);
         self.download_files(files_to_download)
