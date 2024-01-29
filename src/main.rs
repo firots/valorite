@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::{fs, io::{self, Read}, path::Path, process, process::Command, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{fs, io::{self, Read}, path::Path, process, process::Command, sync::mpsc::{self, Sender, Receiver}, thread};
 use std::fs::File;
 use eframe::egui;
 use serde::{Serialize, Deserialize};
@@ -8,7 +8,6 @@ use md5;
 use guard::guard;
 use zip::read::ZipArchive;
 use downloader::Downloader;
-use std::sync::mpsc;
 
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
@@ -53,20 +52,19 @@ fn main() -> Result<(), eframe::Error> {
 
 struct SplashScreen {
     message: String,
-    percentage: u32,
     view_did_load: bool,
-    remote_launcher_build: u32,
-    local_launcher_build: u32
+    receiver: Receiver<String>,
+    sender: Sender<String>
 }
 
 impl Default for SplashScreen {
     fn default() -> Self {
+        let (tx, rx) = mpsc::channel();
         Self {
             message: "Guncellemeler denetleniyor...".to_owned(),
-            percentage: 0,
             view_did_load: false,
-            local_launcher_build: 1,
-            remote_launcher_build: 0
+            sender: tx,
+            receiver: rx
         }
     }
 }
@@ -78,6 +76,7 @@ impl eframe::App for SplashScreen {
                 self.view_did_load();
                 self.view_did_load = true
             }
+            self.receive_message();
             ui.image(egui::include_image!(
                 "../resources/valor_splash.png"
             ));
@@ -90,25 +89,32 @@ impl eframe::App for SplashScreen {
 // Business
 impl SplashScreen {
     fn view_did_load(&mut self) {
+        let sender = self.sender.clone();
         let _ = thread::spawn(move || {
-            let mut updater = Updater::default();
+            let mut updater = Updater {
+                local_launcher_build: 1,
+                remote_launcher_build: 0,
+                message_sender: sender
+            };
             updater.start_update_check();
         });
+    }
+
+    fn receive_message(&mut self) {
+        match self.receiver.recv() {
+            Ok(message) => {
+                self.message = message;
+            }
+            Err(_) => {
+            }
+        }
     }
 }
 
 struct Updater {
     remote_launcher_build: u32,
     local_launcher_build: u32,
-}
-
-impl Default for Updater {
-    fn default() -> Self {
-        Self {
-            local_launcher_build: 1,
-            remote_launcher_build: 0,
-        }
-    }
+    message_sender: Sender<String>
 }
 
 // Business
@@ -178,8 +184,7 @@ impl Updater {
     }
 
     fn start_game(&mut self) {
-        // self.message = "Oyun baslatiliyor...".to_owned(); 
-        thread::sleep(Duration::from_millis(4000));
+        self.message_sender.send("Oyun baslatiliyor...".to_owned()).unwrap();
         Command::new("valor_cuo/ClassicUO.exe")
         .current_dir("valor_cuo/")
         .spawn()
@@ -188,7 +193,7 @@ impl Updater {
     }
 
     fn download_file(&mut self, file_path: String) {
-        // self.message = "Indiriliyor: ".to_owned() + &file_path;
+        self.message_sender.send("Indiriliyor: ".to_owned() + &file_path).unwrap();
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
         let mut download_path = path.parent().and_then(|parent| parent.to_str());
@@ -219,6 +224,7 @@ impl Updater {
             match r {
                 Err(e) => println!("Error: {}", e.to_string()),
                 Ok(s) => {
+                    self.message_sender.send("Guncelleniyor: ".to_owned() + &file_path).unwrap();
                     let extract_path_string = ".".to_owned() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
                     let _ = self.unzip_file(zip_path, extract_path);
@@ -235,7 +241,7 @@ impl Updater {
     
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
-            let outpath = extract_path.join(file.sanitized_name());
+            let outpath = extract_path.join(file.name());
     
             if (&*file.name()).ends_with('/') {
                 std::fs::create_dir_all(&outpath)?;
