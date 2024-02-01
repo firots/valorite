@@ -13,7 +13,6 @@ const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
 const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
-const BUILD_NUMBER: i32 = 1;
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
@@ -119,6 +118,7 @@ struct Updater {
 
 impl Updater {
     fn start_update_check(&mut self) {
+        self.message_sender.send("Guncellemeler denetleniyor...".to_owned()).unwrap();
         guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME) else { 
             println!("Cannot fetch the update.json");
             self.start_game();
