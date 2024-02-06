@@ -1,18 +1,23 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use std::{fs, io::{self, Read}, path::Path, process, process::Command, sync::mpsc::{self, Sender, Receiver}, thread};
+use std::{error::Error, fs, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::{self, Receiver, Sender}, thread};
 use std::fs::File;
 use eframe::egui;
 use serde::{Serialize, Deserialize};
 use reqwest;
 use md5;
-use guard::guard;
 use zip::read::ZipArchive;
 use downloader::Downloader;
 
+const APP_NAME: &str = "Valor Launcher";
 const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
 const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
+const LAUNCHER_FOLDER_PATH: &str = "valor_cuo/";
+const CHECKING_FOR_UPDATES: &str = "Guncellemeler denetleniyor...";
+const DOWNLOADING_FILE: &str = "Indiriliyor: ";
+const UPDATING_FILE: &str = "Guncelleniyor: ";
+const STARTING_GAME: &str = "Oyun baslatiliyor...";
 
 // Models
 #[derive(Serialize, Deserialize, Debug)]
@@ -40,12 +45,11 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
     eframe::run_native(
-        "Valor Launcher",
+        APP_NAME,
         options,
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
-
             Box::<SplashScreen>::default()
         }),
     )
@@ -62,7 +66,7 @@ impl Default for SplashScreen {
     fn default() -> Self {
         let (tx, rx) = mpsc::channel();
         Self {
-            message: "Guncellemeler denetleniyor...".to_owned(),
+            message: CHECKING_FOR_UPDATES.to_owned(),
             view_did_load: false,
             sender: tx,
             receiver: rx
@@ -118,25 +122,21 @@ struct Updater {
 
 impl Updater {
     fn start_update_check(&mut self) {
-        self.message_sender.send("Guncellemeler denetleniyor...".to_owned()).unwrap();
-        guard!(let Ok(response) = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME) else { 
-            println!("Cannot fetch the update.json");
-            self.start_game();
-            return 
-        });
+        self.message_sender.send(CHECKING_FOR_UPDATES.to_owned()).unwrap();
+        match self.get_update_file() {
+            Ok(update_response) => self.process_update_response(update_response),
+            Err(error) => {
+                println!("Cannot get {}: {}", UPDATE_FILE_NAME, error);
+                self.start_game()
+            },
+        };
+    }
 
-        guard!(let Ok(body) = response.text() else { 
-            println!("Cannot get body for update.json.");
-            self.start_game();
-            return 
-        });
-
-        guard!(let Ok(update_response) = serde_json::from_str(&body) else { 
-            println!("Cannot get body for update.json.");
-            self.start_game();
-            return 
-        });
-        self.process_update_response(update_response);
+    fn get_update_file(&self) -> Result<UpdateResponse, Box<dyn Error>> {
+        let response = reqwest::blocking::get(CUO_FILES_URL.to_owned() + "/" + UPDATE_FILE_NAME)?;
+        let body = response.text()?;
+        let update_response = serde_json::from_str(&body)?;
+        Ok(update_response)
     }
 
     fn process_update_response(&mut self, update_response: UpdateResponse) {
@@ -194,14 +194,9 @@ impl Updater {
 
     fn update_launcher(&mut self) {
         if let Some(update_file) = &self.launcher_update_file {
-            println!("update 1");
             self.download_file(&update_file.local_path);
             if let Some(new_hash) = self.get_md5(&update_file.local_path) {
-                println!("update 2");
-                println!("new_hash: {}", new_hash);
-                println!("update_file_hash: {}", update_file.hash);
                 if new_hash == update_file.hash.to_lowercase() {
-                    println!("call self replace: {}", update_file.hash);
                     let new_launcher_path = ".".to_owned() + &update_file.local_path;
                     let _ = self_replace::self_replace(new_launcher_path);
                     let _ = std::fs::remove_file(&update_file.local_path);
@@ -213,16 +208,16 @@ impl Updater {
 
     fn start_game(&mut self) {
         println!("Starting the game...");
-        self.message_sender.send("Oyun baslatiliyor...".to_owned()).unwrap();
+        self.message_sender.send(STARTING_GAME.to_owned()).unwrap();
         Command::new("valor_cuo/cuo.exe")
-        .current_dir("valor_cuo/")
+        .current_dir(LAUNCHER_FOLDER_PATH)
         .spawn()
         .unwrap();
         process::exit(0x0100);
     }
 
     fn download_file(&self, file_path: &str) {
-        self.message_sender.send("Indiriliyor: ".to_owned() + &file_path).unwrap();
+        self.message_sender.send(DOWNLOADING_FILE.to_owned() + &file_path).unwrap();
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
         let mut download_path = path.parent().and_then(|parent| parent.to_str());
@@ -253,7 +248,7 @@ impl Updater {
             match r {
                 Err(e) => println!("Error: {}", e.to_string()),
                 Ok(s) => {
-                    self.message_sender.send("Guncelleniyor: ".to_owned() + &file_path).unwrap();
+                    self.message_sender.send(UPDATING_FILE.to_owned() + &file_path).unwrap();
                     let extract_path_string = ".".to_owned() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
                     let _ = self.unzip_file(zip_path, extract_path);

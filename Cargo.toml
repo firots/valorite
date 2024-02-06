@@ -18,7 +18,6 @@ env_logger = { version = "0.10", default-features = false, features = [
   "auto-color",
   "humantime",
 ] }
-guard = "0.5.2"
 image = { version = "0.24", default-features = false, features = ["jpeg", "png"] }
 md5 = "0.7.0"
 reqwest = { features = ["blocking", "json"] }
