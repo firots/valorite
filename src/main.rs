@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 use std::{error::Error, fs, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::{self, Receiver, Sender}, thread};
 use std::fs::File;
 use eframe::egui;
@@ -13,7 +13,8 @@ const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 const UPDATE_FILE_NAME: &str  = "update.json";
 const COMPRESSION_EXTENSION: &str = ".zip";
 const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
-const LAUNCHER_FOLDER_PATH: &str = "valor_cuo/";
+const CLIENT_FOLDER_PATH: &str = "valor_cuo/";
+const CLIENT_BINARY: &str = "cuo.exe";
 const CHECKING_FOR_UPDATES: &str = "Guncellemeler denetleniyor...";
 const DOWNLOADING_FILE: &str = "Indiriliyor: ";
 const UPDATING_FILE: &str = "Guncelleniyor: ";
@@ -104,7 +105,7 @@ impl SplashScreen {
     }
 
     fn receive_message(&mut self) {
-        match self.receiver.recv() {
+        match self.receiver.try_recv() {
             Ok(message) => {
                 self.message = message;
             }
@@ -209,8 +210,8 @@ impl Updater {
     fn start_game(&mut self) {
         println!("Starting the game...");
         self.message_sender.send(STARTING_GAME.to_owned()).unwrap();
-        Command::new("valor_cuo/cuo.exe")
-        .current_dir(LAUNCHER_FOLDER_PATH)
+        Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
+        .current_dir(CLIENT_FOLDER_PATH)
         .spawn()
         .unwrap();
         process::exit(0x0100);
