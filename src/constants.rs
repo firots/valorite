@@ -1,0 +1,11 @@
+pub const APP_NAME: &str = "Valor Launcher";
+pub const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
+pub const UPDATE_FILE_NAME: &str  = "update.json";
+pub const COMPRESSION_EXTENSION: &str = ".zip";
+pub const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
+pub const CLIENT_FOLDER_PATH: &str = "valor_cuo/";
+pub const CLIENT_BINARY: &str = "cuo.exe";
+pub const CHECKING_FOR_UPDATES: &str = "Guncellemeler denetleniyor...";
+pub const DOWNLOADING_FILE: &str = "Indiriliyor: ";
+pub const UPDATING_FILE: &str = "Guncelleniyor: ";
+pub const STARTING_GAME: &str = "Oyun baslatiliyor...";
