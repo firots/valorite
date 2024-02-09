@@ -23,29 +23,31 @@ impl Default for SplashScreen {
 
 impl eframe::App for SplashScreen {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.view_did_load {
+            self.view_did_load(ctx);
+            self.view_did_load = true
+        }
+
+        self.receive_message();
         egui::CentralPanel::default().show(ctx, |ui| {
-            if !self.view_did_load {
-                self.view_did_load();
-                self.view_did_load = true
-            }
             ui.image(egui::include_image!(
                 "../resources/valor_splash.png"
             ));
             ui.add_space(2.0);
             ui.label(format!("{}", self.message));
-            self.receive_message();
-            ctx.request_repaint();
         });
     }
 }
 
 impl SplashScreen {
-    fn view_did_load(&mut self) {
+    fn view_did_load(&mut self, ctx: &egui::Context) {
         let sender = self.sender.clone();
+        let ctx = ctx.clone();
         let _ = thread::spawn(move || {
             let mut updater = Updater {
-                message_sender: sender,
-                launcher_update_file: None
+                sender,
+                launcher_update_file: None,
+                ctx
             };
             updater.start();
         });

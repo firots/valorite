@@ -21,12 +21,13 @@ pub struct UpdateFile {
 
 pub struct Updater {
     pub(crate) launcher_update_file: Option<UpdateFile>,
-    pub(crate) message_sender: Sender<String>
+    pub(crate) sender: Sender<String>,
+    pub(crate) ctx: egui::Context
 }
 
 impl Updater {
     pub fn start(&mut self) {
-        self.message_sender.send(CHECKING_FOR_UPDATES.to_owned()).unwrap();
+        self.send_message(CHECKING_FOR_UPDATES.to_owned());
         match self.get_update_file() {
             Ok(update_response) => self.process_update_response(update_response),
             Err(error) => {
@@ -34,6 +35,11 @@ impl Updater {
                 self.start_game()
             },
         };
+    }
+
+    fn send_message(&self, message: String) {
+        self.sender.send(message).unwrap();
+        self.ctx.request_repaint();
     }
 
     fn get_update_file(&self) -> Result<UpdateResponse, Box<dyn Error>> {
@@ -108,7 +114,7 @@ impl Updater {
 
     fn start_game(&mut self) {
         info!("Starting the game");
-        self.message_sender.send(STARTING_GAME.to_owned()).unwrap();
+        self.send_message(STARTING_GAME.to_owned());
         Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
             .current_dir(CLIENT_FOLDER_PATH)
             .spawn()
@@ -117,7 +123,7 @@ impl Updater {
     }
 
     fn download_file(&self, file_path: &str) {
-        self.message_sender.send(DOWNLOADING_FILE.to_owned() + &file_path).unwrap();
+        self.send_message(DOWNLOADING_FILE.to_owned() + &file_path);
         let file_url = &(CUO_FILES_URL.to_owned() + &file_path + COMPRESSION_EXTENSION);
         let path = Path::new(&file_path);
         let mut download_path = path.parent().and_then(|parent| parent.to_str());
@@ -148,7 +154,7 @@ impl Updater {
             match r {
                 Err(download_error) => error!("{download_error}"),
                 Ok(download_summary) => {
-                    self.message_sender.send(UPDATING_FILE.to_owned() + &file_path).unwrap();
+                    self.send_message(UPDATING_FILE.to_owned() + &file_path);
                     let extract_path_string = ".".to_owned() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
                     if let Err(zip_error) = self.unzip_file(zip_path, extract_path) {
