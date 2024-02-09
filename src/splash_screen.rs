@@ -28,12 +28,13 @@ impl eframe::App for SplashScreen {
                 self.view_did_load();
                 self.view_did_load = true
             }
-            self.receive_message();
             ui.image(egui::include_image!(
                 "../resources/valor_splash.png"
             ));
             ui.add_space(2.0);
             ui.label(format!("{}", self.message));
+            self.receive_message();
+            ctx.request_repaint();
         });
     }
 }
@@ -46,7 +47,7 @@ impl SplashScreen {
                 message_sender: sender,
                 launcher_update_file: None
             };
-            updater.start_update_check();
+            updater.start();
         });
     }
 

@@ -1,6 +1,6 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use eframe::egui;
 use std::env;
+use eframe::egui;
 use valorite::{constants::*, splash_screen::SplashScreen};
 
 fn main() -> Result<(), eframe::Error> {
@@ -8,6 +8,7 @@ fn main() -> Result<(), eframe::Error> {
     env::set_var(key, "info");
     assert_eq!(env::var(key), Ok("info".to_string()));
     env_logger::init();
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([512.0, 512.0])
@@ -15,6 +16,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_maximize_button(false),
         ..Default::default()
     };
+    
     eframe::run_native(
         APP_NAME,
         options,

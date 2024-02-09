@@ -25,7 +25,7 @@ pub struct Updater {
 }
 
 impl Updater {
-    pub fn start_update_check(&mut self) {
+    pub fn start(&mut self) {
         self.message_sender.send(CHECKING_FOR_UPDATES.to_owned()).unwrap();
         match self.get_update_file() {
             Ok(update_response) => self.process_update_response(update_response),
@@ -46,7 +46,6 @@ impl Updater {
     fn process_update_response(&mut self, update_response: UpdateResponse) {
         let mut files_to_download: Vec<String> = Vec::new();
         self.launcher_update_file = Some(update_response.launcher);
-
         for update_file in update_response.files.iter() {
             let local_hash = self.get_md5(&update_file.local_path);
             if let Some(local_hash_unwrapped) = local_hash {
@@ -147,13 +146,15 @@ impl Updater {
     
         for r in result {
             match r {
-                Err(e) => error!("{}", e.to_string()),
-                Ok(s) => {
+                Err(download_error) => error!("{download_error}"),
+                Ok(download_summary) => {
                     self.message_sender.send(UPDATING_FILE.to_owned() + &file_path).unwrap();
                     let extract_path_string = ".".to_owned() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
-                    let _ = self.unzip_file(zip_path, extract_path);
-                    info!("{}", s)
+                    if let Err(zip_error) = self.unzip_file(zip_path, extract_path) {
+                        error!("{zip_error}");
+                    }
+                    info!("{download_summary}");
                 },
             };
         }
