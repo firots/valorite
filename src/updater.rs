@@ -1,4 +1,4 @@
-use std::{error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender};
+use std::{env, error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender};
 use crate::constants::*;
 use downloader::Downloader;
 use serde::{Deserialize, Serialize};
@@ -115,11 +115,29 @@ impl Updater {
     fn start_game(&mut self) {
         info!("Starting the game");
         self.send_message(STARTING_GAME.to_owned());
-        Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
-            .current_dir(CLIENT_FOLDER_PATH)
-            .spawn()
-            .unwrap();
+
+        if std::env::consts::OS == "macos" {
+            Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
+                .arg("-uofolder")
+                .arg(self.get_current_folder())
+                .arg("-clientversion")
+                .arg(CLIENT_VERSION.to_owned())
+                .spawn()
+                .unwrap();
+        } else {
+            Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
+                .current_dir(CLIENT_FOLDER_PATH)
+                .spawn()
+                .unwrap();
+        }
+
         process::exit(0x0100);
+    }
+
+    fn get_current_folder(&self) -> String {
+        let exe_path = env::current_exe().expect("Failed to get current exe path");
+        let parent_dir = exe_path.parent().expect("Failed to get parent directory");
+        parent_dir.to_str().expect("Failed to convert path to string").to_owned()
     }
 
     fn download_file(&self, file_path: &str) {

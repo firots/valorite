@@ -14,6 +14,7 @@ pub const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";
 pub const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite";
 
 pub const CLIENT_FOLDER_PATH: &str = "valor_cuo/";
+pub const CLIENT_VERSION: &str = "6.0.6.2";
 
 #[cfg(target_os = "windows")]
 pub const CLIENT_BINARY: &str = "cuo.exe";
