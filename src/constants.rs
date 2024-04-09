@@ -25,3 +25,4 @@ pub const CHECKING_FOR_UPDATES: &str = "Guncellemeler denetleniyor...";
 pub const DOWNLOADING_FILE: &str = "Indiriliyor: ";
 pub const UPDATING_FILE: &str = "Guncelleniyor: ";
 pub const STARTING_GAME: &str = "Oyun baslatiliyor...";
+pub const HIDE_WINDOW_MESSAGE: &str = "HIDE_WINDOW";

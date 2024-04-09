@@ -1,4 +1,4 @@
-use std::{env, error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender};
+use std::{env, error::Error, fs::{self, File}, io::{self, Read}, os::unix::fs::PermissionsExt, path::Path, process::{self, Command}, sync::mpsc::Sender};
 use crate::constants::*;
 use downloader::Downloader;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,10 @@ impl Updater {
             Ok(update_response) => self.process_update_response(update_response),
             Err(error) => {
                 error!("{}: {}", UPDATE_FILE_NAME, error);
-                self.start_game()
+                match self.start_game() {
+                    Ok(_) => (),
+                    Err(e) => error!("Failed to start game: {}", e),
+                }
             },
         };
     }
@@ -65,10 +68,11 @@ impl Updater {
     }
 
     fn get_md5(&self, local_path: &str) -> Option<String> {
-        let path_string = &(".".to_owned() + &local_path);
+        let path_string = &(self.get_current_folder() + &local_path);
         let path: &Path = Path::new(path_string);
-
         if path.exists() {
+            info!("{:?}", std::env::current_dir());
+            info!("Local path exists {:?}", local_path);
             let mut f = File::open(path).unwrap();
             let mut contents = Vec::<u8>::new();
             f.read_to_end(&mut contents).unwrap();
@@ -76,6 +80,7 @@ impl Updater {
             let hash = format!("{:x}", digest);
             return Some(hash)
         }
+        info!("Local path not exists {:?}", local_path);
         return None
     }
 
@@ -95,7 +100,10 @@ impl Updater {
                 }
             }
         }
-        self.start_game();
+        match self.start_game() {
+            Ok(_) => (),
+            Err(e) => error!("Failed to start game: {}", e),
+        }
     }
 
     fn update_launcher(&mut self) {
@@ -103,42 +111,56 @@ impl Updater {
             self.download_file(&update_file.local_path);
             if let Some(new_hash) = self.get_md5(&update_file.local_path) {
                 if new_hash == update_file.hash.to_lowercase() {
-                    let new_launcher_path = ".".to_owned() + &update_file.local_path;
+                    let new_launcher_path = self.get_current_folder() + &update_file.local_path;
                     let _ = self_replace::self_replace(new_launcher_path);
                     let _ = std::fs::remove_file(&update_file.local_path);
                 }
             }
         }
-        self.start_game()
+        match self.start_game() {
+            Ok(_) => (),
+            Err(e) => error!("Failed to start game: {}", e),
+        }
     }
 
-    fn start_game(&mut self) {
+    fn start_game(&mut self) -> std::io::Result<()> {
         info!("Starting the game");
         self.send_message(STARTING_GAME.to_owned());
-
+    
         if std::env::consts::OS == "macos" {
             info!("Starting the game");
             let current_folder = self.get_current_folder();
+            let file_path = current_folder.to_owned() + "/" + CLIENT_BINARY;
+            let mut perms = fs::metadata(&file_path)?.permissions();
+            perms.set_mode(0o755); // User read/write/execute, Group and Others read/execute
+            fs::set_permissions(&file_path, perms)?;
+    
             Command::new(current_folder + "/" + CLIENT_BINARY)
                 .arg("-uopath")
                 .arg(self.get_current_folder())
                 .arg("-clientversion")
                 .arg(CLIENT_VERSION.to_owned())
-                .spawn()
-                .unwrap();
+                .spawn()?;
+
+            self.send_message(HIDE_WINDOW_MESSAGE.to_owned());
         } else {
             Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
                 .current_dir(CLIENT_FOLDER_PATH)
-                .spawn()
-                .unwrap();
+                .spawn()?;
             process::exit(0x0100);    
         }
+    
+        Ok(())
     }
 
     fn get_current_folder(&self) -> String {
-        let exe_path = env::current_exe().expect("Failed to get current exe path");
-        let parent_dir = exe_path.parent().expect("Failed to get parent directory");
-        parent_dir.to_str().expect("Failed to convert path to string").to_owned()
+        if std::env::consts::OS == "macos" {
+            let exe_path = env::current_exe().expect("Failed to get current exe path");
+            let parent_dir = exe_path.parent().expect("Failed to get parent directory");
+            parent_dir.to_str().expect("Failed to convert path to string").to_owned()
+        } else {
+            ".".to_owned()
+        }
     }
 
     fn download_file(&self, file_path: &str) {
@@ -149,19 +171,19 @@ impl Updater {
         if download_path == None {
             download_path = Some("/");
         } else {
-            fs::create_dir_all(".".to_owned() + download_path.unwrap())
+            fs::create_dir_all(self.get_current_folder() + download_path.unwrap())
                 .expect("Failed to create");
         }
 
         info!("file_url: {}", file_url);
         info!("download_path: {}", download_path.unwrap());
 
-        let zip_path_string = ".".to_owned() + &file_path + COMPRESSION_EXTENSION;
+        let zip_path_string = self.get_current_folder() + &file_path + COMPRESSION_EXTENSION;
         let zip_path  = std::path::Path::new(&zip_path_string);
         let _ = fs::remove_file(zip_path);
         
         let mut downloader = Downloader::builder()
-            .download_folder(std::path::Path::new(&(".".to_owned() + download_path.unwrap())))
+            .download_folder(std::path::Path::new(&(self.get_current_folder() + download_path.unwrap())))
             .parallel_requests(1)
             .build()
             .unwrap();
@@ -174,7 +196,7 @@ impl Updater {
                 Err(download_error) => error!("{download_error}"),
                 Ok(download_summary) => {
                     self.send_message(UPDATING_FILE.to_owned() + &file_path);
-                    let extract_path_string = ".".to_owned() + download_path.unwrap();
+                    let extract_path_string = self.get_current_folder() + download_path.unwrap();
                     let extract_path = std::path::Path::new(&extract_path_string);
                     if let Err(zip_error) = self.unzip_file(zip_path, extract_path) {
                         error!("{zip_error}");

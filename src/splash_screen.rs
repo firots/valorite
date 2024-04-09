@@ -29,13 +29,15 @@ impl eframe::App for SplashScreen {
         }
 
         self.receive_message();
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.image(egui::include_image!(
-                "../resources/valor_splash.png"
-            ));
-            ui.add_space(2.0);
-            ui.label(format!("{}", self.message));
-        });
+        if self.message != HIDE_WINDOW_MESSAGE {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.image(egui::include_image!(
+                    "../resources/valor_splash.png"
+                ));
+                ui.add_space(2.0);
+                ui.label(format!("{}", self.message));
+            });
+        } 
     }
 }
 
