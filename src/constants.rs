@@ -3,7 +3,7 @@ pub const APP_NAME: &str = "Valor Launcher";
 #[cfg(target_os = "windows")]
 pub const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_win";
 #[cfg(target_os = "macos")]
-pub const CUO_FILES_URL: &str  = "http://valor.gen.tr/cuo_files_mac";
+pub const CUO_FILES_URL: &str  = "https://valor.gen.tr/cuo_files_mac";
 
 pub const UPDATE_FILE_NAME: &str  = "update.json";
 pub const COMPRESSION_EXTENSION: &str = ".zip";

@@ -117,8 +117,10 @@ impl Updater {
         self.send_message(STARTING_GAME.to_owned());
 
         if std::env::consts::OS == "macos" {
-            Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
-                .arg("-uofolder")
+            info!("Starting the game");
+            let current_folder = self.get_current_folder();
+            Command::new(current_folder + "/" + CLIENT_BINARY)
+                .arg("-uopath")
                 .arg(self.get_current_folder())
                 .arg("-clientversion")
                 .arg(CLIENT_VERSION.to_owned())
@@ -129,9 +131,8 @@ impl Updater {
                 .current_dir(CLIENT_FOLDER_PATH)
                 .spawn()
                 .unwrap();
+            process::exit(0x0100);    
         }
-
-        process::exit(0x0100);
     }
 
     fn get_current_folder(&self) -> String {
