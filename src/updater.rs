@@ -1,9 +1,11 @@
-use std::{env, error::Error, fs::{self, File}, io::{self, Read}, os::unix::fs::PermissionsExt, path::Path, process::{self, Command}, sync::mpsc::Sender};
+use std::{env, error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender};
 use crate::constants::*;
 use downloader::Downloader;
 use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
 use log::{error, info};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -71,8 +73,6 @@ impl Updater {
         let path_string = &(self.get_current_folder() + &local_path);
         let path: &Path = Path::new(path_string);
         if path.exists() {
-            info!("{:?}", std::env::current_dir());
-            info!("Local path exists {:?}", local_path);
             let mut f = File::open(path).unwrap();
             let mut contents = Vec::<u8>::new();
             f.read_to_end(&mut contents).unwrap();
@@ -130,10 +130,14 @@ impl Updater {
         if std::env::consts::OS == "macos" {
             info!("Starting the game");
             let current_folder = self.get_current_folder();
-            let file_path = current_folder.to_owned() + "/" + CLIENT_BINARY;
-            let mut perms = fs::metadata(&file_path)?.permissions();
-            perms.set_mode(0o755); // User read/write/execute, Group and Others read/execute
-            fs::set_permissions(&file_path, perms)?;
+            
+            #[cfg(unix)]
+            {
+                let file_path = current_folder.to_owned() + "/" + CLIENT_BINARY;
+                let mut perms = fs::metadata(&file_path)?.permissions();
+                perms.set_mode(0o755); // User read/write/execute, Group and Others read/execute
+                fs::set_permissions(&file_path, perms)?;
+            }
     
             Command::new(current_folder.to_owned() + "/" + CLIENT_BINARY)
                 .current_dir(current_folder)
