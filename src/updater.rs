@@ -135,7 +135,8 @@ impl Updater {
             perms.set_mode(0o755); // User read/write/execute, Group and Others read/execute
             fs::set_permissions(&file_path, perms)?;
     
-            Command::new(current_folder + "/" + CLIENT_BINARY)
+            Command::new(current_folder.to_owned() + "/" + CLIENT_BINARY)
+                .current_dir(current_folder)
                 .arg("-uopath")
                 .arg(self.get_current_folder())
                 .arg("-clientversion")

@@ -31,3 +31,19 @@ egui = "0.26.0"
 
 [build-dependencies]
 winresource = "0.1"
+
+[package.metadata.bundle]
+name = "Valorite"
+identifier = "com.valor.valorite"
+icon = ["resources/uo.ico"]
+version = "1.0.0"
+resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
+copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+category = "Game"
+short_description = "Valor UO Shard"
+long_description = """
+Valor UO Shard ClassicUO Client
+"""
+deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
+osx_frameworks = []
+osx_url_schemes = ["com.doe.exampleapplication"]
