@@ -22,3 +22,5 @@ valor_cuo/
 
 # Launcher self update files
 temp/
+
+.DS_Store
