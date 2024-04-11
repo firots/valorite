@@ -47,4 +47,4 @@ Valor UO Shard ClassicUO Client
 deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
 osx_frameworks = []
 osx_url_schemes = ["com.tr.gen.valor"]
-osx_minimum_system_version = "10.12"
+osx_minimum_system_version = "10.15"
