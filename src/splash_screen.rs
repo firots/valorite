@@ -29,15 +29,27 @@ impl eframe::App for SplashScreen {
         }
 
         self.receive_message();
-        if self.message != HIDE_WINDOW_MESSAGE {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.image(egui::include_image!(
-                    "../resources/valor_splash.png"
-                ));
-                ui.add_space(2.0);
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.image(egui::include_image!(
+                "../resources/valor_splash.png"
+            ));
+            ui.add_space(2.0);
+
+
+            #[cfg(target_os = "windows")]
+            ui.label(format!("{}", self.message));
+
+            #[cfg(target_os = "macos")]
+            if self.message == LAUNCHER_READY {
+                if ui.button(START_GAME).clicked() {
+                    self.start_game(ctx);
+                }
+            } else {
                 ui.label(format!("{}", self.message));
-            });
-        } 
+            }
+        });
+        
     }
 }
 
@@ -59,5 +71,18 @@ impl SplashScreen {
         if let Ok(message) = self.receiver.try_recv() {
             self.message = message;
         }
+    }
+
+    fn start_game(&self, ctx: &egui::Context) {
+        let sender = self.sender.clone();
+        let ctx = ctx.clone();
+        let _ = thread::spawn(move || {
+            let updater = Updater {
+                sender,
+                launcher_update_file: None,
+                ctx
+            };
+            updater.finish()
+        });
     }
 }

@@ -24,7 +24,7 @@ pub struct UpdateFile {
 pub struct Updater {
     pub(crate) launcher_update_file: Option<UpdateFile>,
     pub(crate) sender: Sender<String>,
-    pub(crate) ctx: egui::Context
+    pub(crate) ctx: egui::Context,
 }
 
 impl Updater {
@@ -34,12 +34,21 @@ impl Updater {
             Ok(update_response) => self.process_update_response(update_response),
             Err(error) => {
                 error!("{}: {}", UPDATE_FILE_NAME, error);
-                match self.start_game() {
-                    Ok(_) => (),
-                    Err(e) => error!("Failed to start game: {}", e),
-                }
+                self.finish();
             },
         };
+    }
+
+    pub fn finish(&self) {
+        match self.start_game() {
+            Ok(_) => {
+                self.send_message(LAUNCHER_READY.to_owned());
+            },
+            Err(e) => {
+                error!("Failed to start game: {}", e);
+                self.send_message(e.to_string());
+            }
+        }
     }
 
     fn send_message(&self, message: String) {
@@ -100,10 +109,7 @@ impl Updater {
                 }
             }
         }
-        match self.start_game() {
-            Ok(_) => (),
-            Err(e) => error!("Failed to start game: {}", e),
-        }
+        self.finish();
     }
 
     fn update_launcher(&mut self) {
@@ -117,13 +123,10 @@ impl Updater {
                 }
             }
         }
-        match self.start_game() {
-            Ok(_) => (),
-            Err(e) => error!("Failed to start game: {}", e),
-        }
+        self.finish();
     }
 
-    fn start_game(&mut self) -> std::io::Result<()> {
+    fn start_game(&self) -> std::io::Result<()> {
         info!("Starting the game");
         self.send_message(STARTING_GAME.to_owned());
     
@@ -146,8 +149,6 @@ impl Updater {
                 .arg("-clientversion")
                 .arg(CLIENT_VERSION.to_owned())
                 .spawn()?;
-
-            self.send_message(HIDE_WINDOW_MESSAGE.to_owned());
         } else {
             Command::new(CLIENT_FOLDER_PATH.to_owned() + CLIENT_BINARY)
                 .current_dir(CLIENT_FOLDER_PATH)
