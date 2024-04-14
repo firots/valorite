@@ -42,7 +42,9 @@ impl Updater {
     pub fn finish(&self) {
         match self.start_game() {
             Ok(_) => {
-                self.send_message(LAUNCHER_READY.to_owned());
+                if std::env::consts::OS == "macos" {
+                    self.send_message(LAUNCHER_READY.to_owned());
+                }
             },
             Err(e) => {
                 error!("Failed to start game: {}", e);
