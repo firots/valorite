@@ -58,7 +58,7 @@ impl Updater {
 impl Updater {
     pub fn start(&mut self) {
         self.send_message(CHECKING_FOR_UPDATES.to_owned());
-
+        self.load_update_cache();
         match self.get_update_file() {
             Ok(update_response) => self.process_update_response(update_response),
             Err(error) => {
@@ -92,31 +92,28 @@ impl Updater {
     }
 
     fn update_file_cache(&mut self, file_path: &str, md5: String) -> std::io::Result<()> {
-        let mut existing_entry_found = false;
         let full_path = self.get_current_folder() + file_path;
         let last_modified = fs::metadata(full_path).unwrap().modified()?;
 
         for file in self.update_cache.files.iter_mut() {
             if file.file_path == file_path {
-                existing_entry_found = true;
                 if file.md5 != md5 || file.last_modified != last_modified {
                     file.md5 = md5.to_owned();
                     file.last_modified = last_modified;
-                    self.cache_updated = true;
+                    self.cache_updated = true; 
                 }
+                return Ok(())
             }
         }
 
-        if !existing_entry_found {
-            let update_cache_file = UpdateCacheFile {
-                file_path: file_path.to_owned(),
-                last_modified,
-                md5
-            };
-            self.update_cache.files.push(update_cache_file);
-            self.cache_updated = true;
-        }
-
+        let update_cache_file = UpdateCacheFile {
+            file_path: file_path.to_owned(),
+            last_modified,
+            md5
+        };
+        self.update_cache.files.push(update_cache_file);
+        self.cache_updated = true;
+        
         Ok(())
     }
 
@@ -202,6 +199,8 @@ impl Updater {
                 if launcher_update_file.hash.to_lowercase() != local_launcher_hash {
                     self.update_launcher();
                     return
+                } else {
+                    let _ = self.update_file_cache(LAUNCHER_EXECUTABLE_PATH, local_launcher_hash);
                 }
             }
         }
@@ -214,9 +213,11 @@ impl Updater {
             if let Some(new_hash) = self.get_md5(&update_file.local_path) {
                 if new_hash == update_file.hash.to_lowercase() {
                     let new_launcher_path = self.get_current_folder() + &update_file.local_path;
-                    let _ = self_replace::self_replace(new_launcher_path);
-                    let _ = std::fs::remove_file(&update_file.local_path);
-                    let _ = self.update_file_cache(&update_file.local_path, new_hash);
+                    let _ = self_replace::self_replace(new_launcher_path.clone()); // Clone the value before passing it to self_replace
+                    match std::fs::remove_file(new_launcher_path) {
+                        Ok(_) => info!("Launcher updated successfully"),
+                        Err(e) => error!("Failed to remove old launcher: {}", e)
+                    }
                 }
             }
         }
