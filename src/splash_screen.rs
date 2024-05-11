@@ -1,5 +1,5 @@
 use std::{sync::mpsc::{self, Receiver, Sender}, thread};
-use crate::{constants::*, updater::{Updater}};
+use crate::{constants::*, updater::Updater};
 use eframe::egui;
 
 pub struct SplashScreen {
