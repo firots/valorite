@@ -86,7 +86,7 @@ impl Updater {
             let update_cache_file = self.get_current_folder() + UPDATE_CACHE_FILE;
             let update_cache_path = Path::new(&update_cache_file);
             if let Ok(file) = File::create(update_cache_path) {
-                let _ = serde_json::to_writer(file, &self.update_cache);
+                let _ = serde_json::to_writer_pretty(file, &self.update_cache);
             }
         }
     }
