@@ -7,6 +7,7 @@ pub const CUO_FILES_URL: &str  = "https://valor.gen.tr/cuo_files_mac";
 
 pub const UPDATE_FILE_NAME: &str  = "update.json";
 pub const COMPRESSION_EXTENSION: &str = ".zip";
+pub const UPDATE_CACHE_FILE: &str = "/valor_update_cache.json";
 
 #[cfg(target_os = "windows")]
 pub const LAUNCHER_EXECUTABLE_PATH: &str = "/valorite.exe";

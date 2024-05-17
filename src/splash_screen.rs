@@ -58,11 +58,7 @@ impl SplashScreen {
         let sender = self.sender.clone();
         let ctx = ctx.clone();
         let _ = thread::spawn(move || {
-            let mut updater = Updater {
-                sender,
-                launcher_update_file: None,
-                ctx
-            };
+            let mut updater = Updater::new(sender, ctx);
             updater.start();
         });
     }
@@ -77,11 +73,7 @@ impl SplashScreen {
         let sender = self.sender.clone();
         let ctx = ctx.clone();
         let _ = thread::spawn(move || {
-            let updater = Updater {
-                sender,
-                launcher_update_file: None,
-                ctx
-            };
+            let updater = Updater::new(sender, ctx);
             updater.finish()
         });
     }

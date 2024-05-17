@@ -1,4 +1,4 @@
-use std::{env, error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender};
+use std::{env, error::Error, fs::{self, File}, io::{self, Read}, path::Path, process::{self, Command}, sync::mpsc::Sender, time::SystemTime};
 use crate::constants::*;
 use downloader::Downloader;
 use serde::{Deserialize, Serialize};
@@ -14,22 +14,51 @@ struct UpdateResponse {
     files: Vec<UpdateFile>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateFile {
     local_path: String,
     hash: String
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCacheFile {
+    file_path: String,
+    last_modified: SystemTime,
+    md5: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCache {
+    pub(crate) files: Vec<UpdateCacheFile>
+}
+
 pub struct Updater {
-    pub(crate) launcher_update_file: Option<UpdateFile>,
+    launcher_update_file: Option<UpdateFile>,
+    update_cache: UpdateCache,
+    cache_updated: bool,
     pub(crate) sender: Sender<String>,
     pub(crate) ctx: egui::Context,
 }
 
 impl Updater {
+    pub fn new(sender: Sender<String>, ctx: egui::Context) -> Self {
+        Self {
+            launcher_update_file: None,
+            update_cache: UpdateCache { files: Vec::new() },
+            cache_updated: false,
+            sender,
+            ctx,
+        }
+    }
+}
+
+impl Updater {
     pub fn start(&mut self) {
         self.send_message(CHECKING_FOR_UPDATES.to_owned());
+        self.load_update_cache();
         match self.get_update_file() {
             Ok(update_response) => self.process_update_response(update_response),
             Err(error) => {
@@ -39,7 +68,57 @@ impl Updater {
         };
     }
 
+    pub fn load_update_cache(&mut self) {
+        let update_cache_file = self.get_current_folder() + UPDATE_CACHE_FILE;
+        let update_cache_path = Path::new(&update_cache_file);
+        if update_cache_path.exists() {
+            if let Ok(file) = File::open(update_cache_path) {
+                let reader = io::BufReader::new(file);
+                if let Ok(update_cache) = serde_json::from_reader::<_, UpdateCache>(reader) {
+                    self.update_cache = update_cache;
+                }
+            }
+        } 
+    }
+
+    pub fn save_update_cache_if_needed(&self) {
+        if self.cache_updated { 
+            let update_cache_file = self.get_current_folder() + UPDATE_CACHE_FILE;
+            let update_cache_path = Path::new(&update_cache_file);
+            if let Ok(file) = File::create(update_cache_path) {
+                let _ = serde_json::to_writer_pretty(file, &self.update_cache);
+            }
+        }
+    }
+
+    fn update_file_cache(&mut self, file_path: &str, md5: String) -> std::io::Result<()> {
+        let full_path = self.get_current_folder() + file_path;
+        let last_modified = fs::metadata(full_path).unwrap().modified()?;
+
+        for file in self.update_cache.files.iter_mut() {
+            if file.file_path == file_path {
+                if file.md5 != md5 || file.last_modified != last_modified {
+                    file.md5 = md5.to_owned();
+                    file.last_modified = last_modified;
+                    self.cache_updated = true; 
+                }
+                return Ok(())
+            }
+        }
+
+        let update_cache_file = UpdateCacheFile {
+            file_path: file_path.to_owned(),
+            last_modified,
+            md5
+        };
+        self.update_cache.files.push(update_cache_file);
+        self.cache_updated = true;
+        
+        Ok(())
+    }
+
     pub fn finish(&self) {
+        self.save_update_cache_if_needed();
         match self.start_game() {
             Ok(_) => {
                 if std::env::consts::OS == "macos" {
@@ -70,8 +149,10 @@ impl Updater {
         self.launcher_update_file = Some(update_response.launcher);
         for update_file in update_response.files.iter() {
             let local_hash = self.get_md5(&update_file.local_path);
+
             if let Some(local_hash_unwrapped) = local_hash {
                 if local_hash_unwrapped == update_file.hash.to_lowercase() {
+                    let _ = self.update_file_cache(&update_file.local_path, local_hash_unwrapped);
                     continue;
                 }
             }
@@ -84,6 +165,16 @@ impl Updater {
         let path_string = &(self.get_current_folder() + &local_path);
         let path: &Path = Path::new(path_string);
         if path.exists() {
+            if let Ok(metadata) = fs::metadata(path) {
+                if let Ok(last_modified) = metadata.modified() {
+                    for file in self.update_cache.files.iter() {
+                        if file.file_path == local_path && file.last_modified == last_modified {
+                            return Some(file.md5.to_owned())
+                        }
+                    }
+                }
+            }
+
             let mut f = File::open(path).unwrap();
             let mut contents = Vec::<u8>::new();
             f.read_to_end(&mut contents).unwrap();
@@ -108,6 +199,8 @@ impl Updater {
                 if launcher_update_file.hash.to_lowercase() != local_launcher_hash {
                     self.update_launcher();
                     return
+                } else {
+                    let _ = self.update_file_cache(LAUNCHER_EXECUTABLE_PATH, local_launcher_hash);
                 }
             }
         }
@@ -115,13 +208,16 @@ impl Updater {
     }
 
     fn update_launcher(&mut self) {
-        if let Some(update_file) = &self.launcher_update_file {
+        if let Some(update_file) = self.launcher_update_file.clone() {
             self.download_file(&update_file.local_path);
             if let Some(new_hash) = self.get_md5(&update_file.local_path) {
                 if new_hash == update_file.hash.to_lowercase() {
                     let new_launcher_path = self.get_current_folder() + &update_file.local_path;
-                    let _ = self_replace::self_replace(new_launcher_path);
-                    let _ = std::fs::remove_file(&update_file.local_path);
+                    let _ = self_replace::self_replace(new_launcher_path.clone()); // Clone the value before passing it to self_replace
+                    match std::fs::remove_file(new_launcher_path) {
+                        Ok(_) => info!("Launcher updated successfully"),
+                        Err(e) => error!("Failed to remove old launcher: {}", e)
+                    }
                 }
             }
         }
